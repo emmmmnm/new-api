@@ -696,3 +696,124 @@ For commercial licensing, please contact support@quantumnous.com
     display: none;
   }
 }
+
+/* Editorial surfaces */
+.home-editorial,
+.dashboard-overview-editorial,
+.authenticated-editorial-shell {
+  --background: oklch(0.974 0.008 88);
+  --foreground: oklch(0.16 0.008 75);
+  --card: oklch(0.984 0.006 88);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: var(--foreground);
+  --primary-foreground: var(--background);
+  --secondary: oklch(0.94 0.009 88);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.953 0.007 88);
+  --muted-foreground: oklch(0.48 0.012 75);
+  --accent: oklch(0.925 0.01 88);
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.84 0.01 85);
+  --input: var(--border);
+  --ring: oklch(0.42 0.01 75);
+  --radius: 0.5rem;
+}
+
+.dark .home-editorial,
+.dark .dashboard-overview-editorial,
+.dark .authenticated-editorial-shell {
+  --background: oklch(0.19 0.008 75);
+  --foreground: oklch(0.94 0.008 88);
+  --card: oklch(0.22 0.008 75);
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --primary: var(--foreground);
+  --primary-foreground: var(--background);
+  --secondary: oklch(0.25 0.008 75);
+  --secondary-foreground: var(--foreground);
+  --muted: oklch(0.24 0.008 75);
+  --muted-foreground: oklch(0.72 0.01 85);
+  --accent: oklch(0.28 0.01 75);
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.42 0.01 75);
+  --input: var(--border);
+  --ring: oklch(0.72 0.01 85);
+}
+
+.authenticated-editorial-shell {
+  --sidebar: color-mix(in oklch, var(--foreground) 1.5%, var(--background));
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--foreground);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: color-mix(
+    in oklch,
+    var(--foreground) 7%,
+    var(--background)
+  );
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: color-mix(
+    in oklch,
+    var(--foreground) 14%,
+    var(--background)
+  );
+  --sidebar-ring: var(--ring);
+}
+
+.dark .authenticated-editorial-shell {
+  --sidebar: color-mix(in oklch, var(--foreground) 4%, var(--background));
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--foreground);
+  --sidebar-primary-foreground: var(--background);
+  --sidebar-accent: color-mix(
+    in oklch,
+    var(--foreground) 10%,
+    var(--background)
+  );
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: color-mix(
+    in oklch,
+    var(--foreground) 18%,
+    var(--background)
+  );
+  --sidebar-ring: var(--ring);
+}
+
+.dashboard-overview-editorial [data-slot='stat-card-value'] {
+  font-family: var(--font-serif);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.dashboard-overview-editorial [data-slot='stat-card'] {
+  min-height: 5.5rem;
+}
+
+.dashboard-overview-editorial [data-slot='stat-card-sparkline'] {
+  color: var(--muted-foreground);
+}
+
+.home-editorial-dots {
+  pointer-events: none;
+  background-image: radial-gradient(
+    circle,
+    color-mix(in oklch, var(--foreground) 17%, transparent) 0.75px,
+    transparent 0.85px
+  );
+  background-size: 7px 7px;
+  mask-image: radial-gradient(
+    ellipse 44% 46% at 50% 49%,
+    black 0%,
+    transparent 72%
+  );
+  opacity: 0.55;
+}
+
+.home-editorial-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 760px;
+}

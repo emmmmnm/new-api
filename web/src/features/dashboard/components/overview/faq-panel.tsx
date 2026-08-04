@@ -63,10 +63,10 @@ export function FAQPanel() {
               <AccordionItem
                 key={key}
                 value={value}
-                className='border-border/60'
+                className='border-border/70'
               >
                 <AccordionTrigger className='text-start hover:no-underline'>
-                  <Markdown className='text-sm leading-relaxed font-semibold'>
+                  <Markdown className='font-serif text-sm leading-relaxed font-semibold'>
                     {item.question}
                   </Markdown>
                 </AccordionTrigger>

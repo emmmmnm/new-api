@@ -101,28 +101,30 @@ export function Stats(_props: StatsProps) {
     { end: 50, suffix: '+', label: t('upstream services integrated') },
     { end: 100, suffix: '+', label: t('model billing support') },
     { end: 50, suffix: '+', label: t('compatible API routes') },
-    { end: 10, suffix: '+', label: t('scheduling controls') },
   ]
 
   return (
-    <div className='border-border/40 bg-muted/10 relative z-10 border-y'>
-      <div className='mx-auto max-w-6xl px-6 py-10 md:py-12'>
-        <div className='grid grid-cols-2 gap-8 md:grid-cols-4 md:gap-12'>
+    <section
+      className='home-editorial-section border-border/60 bg-muted/20 relative z-10 border-y'
+      data-home-section='stats'
+    >
+      <div className='mx-auto max-w-7xl px-6 md:px-8'>
+        <div className='grid md:grid-cols-3'>
           {stats.map((s) => (
             <div
               key={s.label}
-              className='flex flex-col items-center text-center'
+              className='border-border/60 flex min-h-48 flex-col justify-center border-b py-10 text-center last:border-b-0 md:border-r md:border-b-0 md:last:border-r-0'
             >
-              <span className='text-2xl font-bold tracking-tight md:text-3xl'>
+              <span className='font-serif text-5xl font-semibold tracking-tight md:text-6xl lg:text-7xl'>
                 <Counter end={s.end} suffix={s.suffix} decimals={s.decimals} />
               </span>
-              <span className='text-muted-foreground mt-1.5 text-xs'>
+              <span className='text-muted-foreground mt-4 font-mono text-[10px] tracking-[0.16em] uppercase md:text-xs'>
                 {s.label}
               </span>
             </div>
           ))}
         </div>
       </div>
-    </div>
+    </section>
   )
 }

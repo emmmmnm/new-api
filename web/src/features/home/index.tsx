@@ -121,13 +121,17 @@ export function Home() {
   }
 
   return (
-    <PublicLayout showMainContainer={false}>
+    <PublicLayout
+      showMainContainer={false}
+      className='home-editorial'
+      headerProps={{ variant: 'editorial' }}
+    >
       <Hero isAuthenticated={isAuthenticated} />
-      <Stats />
       <Features />
+      <Stats />
       <HowItWorks />
       <CTA isAuthenticated={isAuthenticated} />
-      <Footer />
+      <Footer variant='editorial' />
     </PublicLayout>
   )
 }

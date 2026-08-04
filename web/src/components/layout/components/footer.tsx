@@ -40,6 +40,7 @@ interface FooterProps {
   columns?: FooterColumnProps[]
   copyright?: string
   className?: string
+  variant?: 'default' | 'editorial'
 }
 
 const NEW_API_FOOTER_ATTRIBUTION_KEY = [
@@ -246,6 +247,46 @@ export function Footer(props: FooterProps) {
     )
   }
 
+  if (props.variant === 'editorial') {
+    return (
+      <footer
+        className={cn(
+          'border-border/60 relative z-10 border-t',
+          props.className
+        )}
+      >
+        <div className='mx-auto flex max-w-7xl flex-col gap-8 px-6 py-10 md:flex-row md:items-center md:justify-between md:px-8'>
+          <div className='flex items-center gap-3'>
+            <img
+              src={displayLogo}
+              alt={displayName}
+              className='size-7 rounded-md object-contain'
+            />
+            <div>
+              <p className='font-serif text-base font-semibold'>
+                {displayName}
+              </p>
+              <p className='text-muted-foreground mt-0.5 text-xs tracking-wide'>
+                {t('Powerful API Management Platform')}
+              </p>
+            </div>
+          </div>
+
+          <div className='text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs md:justify-end'>
+            <span>
+              &copy; {currentYear} {displayName}
+            </span>
+            <LegalLinks leadingSeparator />
+            <span aria-hidden='true' className='text-muted-foreground/30'>
+              ·
+            </span>
+            <ProjectAttribution currentYear={currentYear} inline />
+          </div>
+        </div>
+      </footer>
+    )
+  }
+
   return (
     <footer
       className={cn('border-border/40 relative z-10 border-t', props.className)}
@@ -272,14 +313,14 @@ export function Footer(props: FooterProps) {
           {/* Links columns */}
           {isDemoSiteMode && (
             <div className='grid grid-cols-3 gap-8 md:gap-16'>
-              {displayColumns.map((column, index) => (
-                <div key={index}>
+              {displayColumns.map((column) => (
+                <div key={column.title}>
                   <p className='text-muted-foreground/50 mb-3 text-xs font-medium tracking-wider uppercase'>
                     {t(column.title)}
                   </p>
                   <ul className='space-y-2.5'>
-                    {column.links.map((link, linkIndex) => (
-                      <li key={linkIndex}>
+                    {column.links.map((link) => (
+                      <li key={`${link.href}-${link.text}`}>
                         <FooterLinkItem link={link} />
                       </li>
                     ))}

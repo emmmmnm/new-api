@@ -84,8 +84,8 @@ export function AnnouncementsPanel() {
                 type='button'
                 onClick={() => handleAnnouncementClick(item)}
                 className={cn(
-                  'group hover:bg-muted/40 w-full px-3 py-3 text-left transition-colors sm:px-5 sm:py-3.5',
-                  idx < list.length - 1 && 'border-border/60 border-b'
+                  'group hover:bg-muted/55 w-full px-3 py-3 text-left transition-colors sm:px-5 sm:py-3.5',
+                  idx < list.length - 1 && 'border-border/70 border-b'
                 )}
               >
                 <div className='flex items-start gap-2.5'>

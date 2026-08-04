@@ -16,24 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { SidebarTrigger } from '@/components/ui/sidebar'
-import { cn } from '@/lib/utils'
-
-type HeaderProps = React.HTMLAttributes<HTMLElement>
-
-export function Header({ className, children, ...props }: HeaderProps) {
-  return (
-    <header
-      className={cn(
-        'bg-background/95 border-border/70 sticky top-0 z-40 h-[var(--app-header-height,3rem)] w-full shrink-0 border-b backdrop-blur',
-        className
-      )}
-      {...props}
-    >
-      <div className='flex h-full items-center gap-1.5 px-2 sm:gap-2 sm:px-3'>
-        <SidebarTrigger variant='ghost' className='size-8' />
-        {children}
-      </div>
-    </header>
-  )
-}
+export const homeLayoutClasses = {
+  hero: 'relative flex min-h-[calc(100svh-1rem)] items-center overflow-hidden px-6 pt-28 pb-20 md:px-8 md:pt-32 md:pb-24',
+  featureGrid: 'grid border-t border-border/60 md:grid-cols-2 lg:grid-cols-3',
+  workflowGrid:
+    'grid items-start gap-14 lg:grid-cols-[minmax(0,0.78fr)_minmax(30rem,1.22fr)] lg:gap-20',
+} as const

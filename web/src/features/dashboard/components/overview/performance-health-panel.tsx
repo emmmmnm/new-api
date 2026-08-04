@@ -92,19 +92,21 @@ export function PerformanceHealthPanel() {
   const hasData = models.length > 0
 
   return (
-    <section className='bg-card h-full overflow-hidden rounded-2xl border shadow-xs'>
-      <div className='flex items-center gap-2 border-b px-4 py-3 sm:px-5'>
+    <section className='bg-card h-full overflow-hidden rounded-lg border'>
+      <div className='border-border/70 flex items-center gap-2 border-b px-4 py-3 sm:px-5'>
         <IconBadge tone='success' size='sm'>
           <HeartPulse />
         </IconBadge>
-        <h3 className='text-sm font-semibold'>{t('Performance health')}</h3>
+        <h3 className='font-serif text-sm font-semibold'>
+          {t('Performance health')}
+        </h3>
         <span className='text-muted-foreground ml-auto text-xs'>
           {t('Performance metrics for the last 24 hours')}
         </span>
       </div>
 
-      <div className='space-y-3 p-4 sm:p-5'>
-        <div className='grid grid-cols-3 gap-2'>
+      <div className='flex flex-col gap-3 p-4 sm:p-5'>
+        <div className='border-border/70 bg-background/40 grid grid-cols-1 divide-y rounded-md border sm:grid-cols-3 sm:divide-x sm:divide-y-0'>
           <MetricCell
             icon={HeartPulse}
             label={t('Success rate')}
@@ -130,7 +132,7 @@ export function PerformanceHealthPanel() {
         </div>
 
         {loading ? (
-          <div className='space-y-1'>
+          <div className='flex flex-col gap-1'>
             {['success', 'latency', 'throughput'].map((key) => (
               <Skeleton key={key} className='h-5 w-full rounded' />
             ))}
@@ -188,7 +190,7 @@ function MetricCell(props: {
 }) {
   const Icon = props.icon
   return (
-    <div className='bg-muted/40 rounded-xl px-3 py-2.5'>
+    <div className='min-w-0 px-3 py-2.5'>
       <div className='text-muted-foreground flex items-center gap-1.5 text-[11px] font-medium'>
         <IconBadge tone={props.tone} size='xs'>
           <Icon />
@@ -200,7 +202,7 @@ function MetricCell(props: {
       ) : (
         <div
           className={cn(
-            'mt-1.5 font-mono text-sm font-semibold tabular-nums',
+            'mt-1.5 font-serif text-sm font-semibold break-words tabular-nums',
             props.valueClassName
           )}
         >

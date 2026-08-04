@@ -153,6 +153,7 @@ function LineSparkline(props: { values?: number[]; tone: StatCardTone }) {
 
   return (
     <div
+      data-slot='stat-card-sparkline'
       className={cn(
         'relative h-8 overflow-hidden rounded-lg',
         LINE_TONE_CLASSES[props.tone]
@@ -257,7 +258,10 @@ export function StatCard(props: StatCardProps) {
   } else if (props.error) {
     valueContent = (
       <div className='flex flex-col gap-1'>
-        <div className='text-muted-foreground mt-0.5 font-mono text-base font-bold tracking-tight break-all tabular-nums sm:text-2xl'>
+        <div
+          data-slot='stat-card-value'
+          className='text-muted-foreground mt-0.5 font-mono text-base font-bold tracking-tight break-all tabular-nums sm:text-2xl'
+        >
           --
         </div>
         <p
@@ -273,7 +277,10 @@ export function StatCard(props: StatCardProps) {
   } else {
     valueContent = (
       <div className='flex flex-col gap-1'>
-        <div className='text-foreground font-mono text-base font-semibold tracking-tight break-all tabular-nums sm:text-2xl'>
+        <div
+          data-slot='stat-card-value'
+          className='text-foreground font-mono text-base font-semibold tracking-tight break-all tabular-nums sm:text-2xl'
+        >
           {props.value}
         </div>
         <p
@@ -299,6 +306,7 @@ export function StatCard(props: StatCardProps) {
 
   return (
     <div
+      data-slot='stat-card'
       className={cn(
         'group flex flex-col justify-between sm:min-h-32 sm:gap-3',
         props.compactMobile ? 'gap-1' : 'gap-1.5'
