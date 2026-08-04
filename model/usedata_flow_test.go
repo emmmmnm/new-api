@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,6 +149,7 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 		ChannelID: 1,
 		NodeName:  "node-a",
 		Quota:     100,
+		Count:     1,
 		TokenUsed: 40,
 	})
 	LogQuotaData(QuotaDataLogParams{
@@ -160,6 +162,7 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 		ChannelID: 1,
 		NodeName:  "node-a",
 		Quota:     50,
+		Count:     1,
 		TokenUsed: 20,
 	})
 	LogQuotaData(QuotaDataLogParams{
@@ -172,6 +175,7 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 		ChannelID: 1,
 		NodeName:  "node-a",
 		Quota:     25,
+		Count:     1,
 		TokenUsed: 10,
 	})
 
@@ -190,4 +194,86 @@ func TestLogQuotaDataSplitsRowsByUseGroupTokenChannelAndNode(t *testing.T) {
 	require.Equal(t, 60, rows[0].TokenUsed)
 	require.Equal(t, "default", rows[1].UseGroup)
 	require.Equal(t, 25, rows[1].Quota)
+}
+
+func TestRecordTaskBillingLogWritesSignedQuotaAdjustments(t *testing.T) {
+	truncateTables(t)
+	CacheQuotaDataLock.Lock()
+	CacheQuotaData = make(map[string]*QuotaData)
+	CacheQuotaDataLock.Unlock()
+	require.NoError(t, DB.Create(&User{Id: 101, Username: "billing-user", AffCode: "billing-101", Status: common.UserStatusEnabled}).Error)
+
+	const createdAt int64 = 3661
+	LogQuotaData(QuotaDataLogParams{
+		UserID:    101,
+		Username:  "billing-user",
+		ModelName: "gpt-b",
+		Quota:     100,
+		Count:     1,
+		CreatedAt: createdAt,
+		TokenUsed: 40,
+		UseGroup:  "vip",
+		TokenID:   11,
+		ChannelID: 2,
+		NodeName:  "node-b",
+	})
+	RecordTaskBillingLog(RecordTaskBillingLogParams{
+		UserId:             101,
+		LogType:            LogTypeConsume,
+		ModelName:          "gpt-b",
+		Quota:              20,
+		Group:              "vip",
+		TokenId:            11,
+		ChannelId:          2,
+		NodeName:           "node-b",
+		QuotaDataCreatedAt: createdAt,
+		QuotaDataTracked:   true,
+	})
+	RecordTaskBillingLog(RecordTaskBillingLogParams{
+		UserId:             101,
+		LogType:            LogTypeRefund,
+		ModelName:          "gpt-b",
+		Quota:              40,
+		Group:              "vip",
+		TokenId:            11,
+		ChannelId:          2,
+		NodeName:           "node-b",
+		QuotaDataCreatedAt: createdAt,
+		QuotaDataTracked:   true,
+	})
+	RecordTaskBillingLog(RecordTaskBillingLogParams{
+		UserId:    101,
+		LogType:   LogTypeRefund,
+		ModelName: "gpt-b",
+		Quota:     100,
+	})
+	require.NoError(t, DB.Create(&User{Id: 102, Username: "missing-consume", AffCode: "missing-102", Status: common.UserStatusEnabled}).Error)
+	RecordTaskBillingLog(RecordTaskBillingLogParams{
+		UserId:             102,
+		LogType:            LogTypeRefund,
+		ModelName:          "gpt-b",
+		Quota:              30,
+		Group:              "vip",
+		ChannelId:          2,
+		NodeName:           "node-b",
+		QuotaDataCreatedAt: createdAt,
+		QuotaDataTracked:   true,
+	})
+	SaveQuotaDataCache()
+
+	var row QuotaData
+	require.NoError(t, DB.Where("user_id = ?", 101).First(&row).Error)
+	assert.Equal(t, 80, row.Quota)
+	assert.Equal(t, 1, row.Count)
+	assert.Equal(t, 40, row.TokenUsed)
+	assert.Equal(t, createdAt-(createdAt%3600), row.CreatedAt)
+	var missingCount int64
+	require.NoError(t, DB.Model(&QuotaData{}).Where("user_id = ?", 102).Count(&missingCount).Error)
+	assert.Zero(t, missingCount)
+
+	var logs []Log
+	require.NoError(t, LOG_DB.Where("user_id = ?", 101).Order("id").Find(&logs).Error)
+	require.Len(t, logs, 3)
+	assert.Equal(t, LogTypeRefund, logs[1].Type)
+	assert.Equal(t, 40, logs[1].Quota)
 }

@@ -17,7 +17,12 @@ import (
 
 // LogTaskConsumption 记录任务消费日志和统计信息（仅记录，不涉及实际扣费）。
 // 实际扣费已由 BillingSession（PreConsumeBilling + SettleBilling）完成。
-func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
+func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) (int64, bool) {
+	quotaDataCreatedAt := info.StartTime.Unix()
+	if quotaDataCreatedAt <= 0 {
+		quotaDataCreatedAt = common.GetTimestamp()
+	}
+	quotaDataTracked := common.LogConsumeEnabled && common.DataExportEnabled
 	tokenName := c.GetString("token_name")
 	logContent := fmt.Sprintf("操作 %s", info.Action)
 	// 支持任务仅按次计费
@@ -53,17 +58,19 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	}
 	attachQuotaSaturation(c, info, other)
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
-		ChannelId: info.ChannelId,
-		ModelName: info.OriginModelName,
-		TokenName: tokenName,
-		Quota:     info.PriceData.Quota,
-		Content:   logContent,
-		TokenId:   info.TokenId,
-		Group:     info.UsingGroup,
-		Other:     other,
+		ChannelId:          info.ChannelId,
+		ModelName:          info.OriginModelName,
+		TokenName:          tokenName,
+		Quota:              info.PriceData.Quota,
+		Content:            logContent,
+		TokenId:            info.TokenId,
+		Group:              info.UsingGroup,
+		Other:              other,
+		QuotaDataCreatedAt: quotaDataCreatedAt,
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
 	model.UpdateChannelUsedQuota(info.ChannelId, info.PriceData.Quota)
+	return quotaDataCreatedAt, quotaDataTracked
 }
 
 // ---------------------------------------------------------------------------
@@ -177,21 +184,26 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool 
 
 	// 2. 退还令牌额度
 	taskAdjustTokenQuota(ctx, task, -quota)
+	model.UpdateUserUsedQuota(task.UserId, -quota)
+	model.UpdateChannelUsedQuota(task.ChannelId, -quota)
 
 	// 3. 记录日志
 	other := taskBillingOther(task)
 	other["task_id"] = task.TaskID
 	other["reason"] = reason
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
-		UserId:    task.UserId,
-		LogType:   model.LogTypeRefund,
-		Content:   "",
-		ChannelId: task.ChannelId,
-		ModelName: taskModelName(task),
-		Quota:     quota,
-		TokenId:   task.PrivateData.TokenId,
-		Group:     task.Group,
-		Other:     other,
+		UserId:             task.UserId,
+		LogType:            model.LogTypeRefund,
+		Content:            "",
+		ChannelId:          task.ChannelId,
+		ModelName:          taskModelName(task),
+		Quota:              quota,
+		TokenId:            task.PrivateData.TokenId,
+		Group:              task.Group,
+		Other:              other,
+		NodeName:           task.PrivateData.NodeName,
+		QuotaDataCreatedAt: task.PrivateData.QuotaDataCreatedAt,
+		QuotaDataTracked:   task.PrivateData.QuotaDataTracked,
 	})
 
 	// 4. 资金退款完成后再清除持久化标记。
@@ -199,6 +211,50 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool 
 	task.Quota = 0
 	if err := task.UpdateQuota(); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("退款成功但清除 task quota 失败 task %s: %s", task.TaskID, err.Error()))
+	}
+	return true
+}
+
+// RefundMidjourneyQuota applies the legacy Midjourney failure refund and keeps
+// usage statistics aligned with the original consume record.
+func RefundMidjourneyQuota(ctx context.Context, task *model.Midjourney, reason string) bool {
+	if task == nil || task.Quota == 0 {
+		return true
+	}
+	if err := model.IncreaseUserQuota(task.UserId, task.Quota, false); err != nil {
+		logger.LogError(ctx, "fail to increase user quota: "+err.Error())
+		return false
+	}
+
+	model.UpdateUserUsedQuota(task.UserId, -task.Quota)
+	model.UpdateChannelUsedQuota(task.ChannelId, -task.Quota)
+	modelName := task.ModelName
+	if modelName == "" {
+		modelName = CovertMjpActionToModelName(task.Action)
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    task.UserId,
+		LogType:   model.LogTypeRefund,
+		ChannelId: task.ChannelId,
+		ModelName: modelName,
+		Quota:     task.Quota,
+		TokenId:   task.TokenId,
+		Group:     task.UseGroup,
+		Other: map[string]interface{}{
+			"task_id": task.MjId,
+			"reason":  reason,
+		},
+		NodeName:           task.NodeName,
+		QuotaDataCreatedAt: task.QuotaDataCreatedAt,
+		QuotaDataTracked:   task.QuotaDataTracked,
+	})
+	// Clear the persisted pending amount so a later poll cannot refund the same
+	// Midjourney task again after another state update wins the CAS.
+	task.Quota = 0
+	if task.Id > 0 {
+		if err := model.DB.Model(&model.Midjourney{}).Where("id = ?", task.Id).Update("quota", 0).Error; err != nil {
+			logger.LogError(ctx, fmt.Sprintf("退款成功但清除 Midjourney quota 失败 mj_id=%s: %v", task.MjId, err))
+		}
 	}
 	return true
 }
@@ -244,11 +300,11 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 
 	var logType int
 	var logQuota int
+	model.UpdateUserUsedQuota(task.UserId, quotaDelta)
+	model.UpdateChannelUsedQuota(task.ChannelId, quotaDelta)
 	if quotaDelta > 0 {
 		logType = model.LogTypeConsume
 		logQuota = quotaDelta
-		model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quotaDelta)
-		model.UpdateChannelUsedQuota(task.ChannelId, quotaDelta)
 	} else {
 		logType = model.LogTypeRefund
 		logQuota = -quotaDelta
@@ -261,16 +317,18 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		attachQuotaSaturationToOther(other, clamp)
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
-		UserId:    task.UserId,
-		LogType:   logType,
-		Content:   reason,
-		ChannelId: task.ChannelId,
-		ModelName: taskModelName(task),
-		Quota:     logQuota,
-		TokenId:   task.PrivateData.TokenId,
-		Group:     task.Group,
-		Other:     other,
-		NodeName:  task.PrivateData.NodeName,
+		UserId:             task.UserId,
+		LogType:            logType,
+		Content:            reason,
+		ChannelId:          task.ChannelId,
+		ModelName:          taskModelName(task),
+		Quota:              logQuota,
+		TokenId:            task.PrivateData.TokenId,
+		Group:              task.Group,
+		Other:              other,
+		NodeName:           task.PrivateData.NodeName,
+		QuotaDataCreatedAt: task.PrivateData.QuotaDataCreatedAt,
+		QuotaDataTracked:   task.PrivateData.QuotaDataTracked,
 	})
 }
 

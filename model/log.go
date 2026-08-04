@@ -326,18 +326,19 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 }
 
 type RecordConsumeLogParams struct {
-	ChannelId        int                    `json:"channel_id"`
-	PromptTokens     int                    `json:"prompt_tokens"`
-	CompletionTokens int                    `json:"completion_tokens"`
-	ModelName        string                 `json:"model_name"`
-	TokenName        string                 `json:"token_name"`
-	Quota            int                    `json:"quota"`
-	Content          string                 `json:"content"`
-	TokenId          int                    `json:"token_id"`
-	UseTimeSeconds   int                    `json:"use_time_seconds"`
-	IsStream         bool                   `json:"is_stream"`
-	Group            string                 `json:"group"`
-	Other            map[string]interface{} `json:"other"`
+	ChannelId          int                    `json:"channel_id"`
+	PromptTokens       int                    `json:"prompt_tokens"`
+	CompletionTokens   int                    `json:"completion_tokens"`
+	ModelName          string                 `json:"model_name"`
+	TokenName          string                 `json:"token_name"`
+	Quota              int                    `json:"quota"`
+	Content            string                 `json:"content"`
+	TokenId            int                    `json:"token_id"`
+	UseTimeSeconds     int                    `json:"use_time_seconds"`
+	IsStream           bool                   `json:"is_stream"`
+	Group              string                 `json:"group"`
+	Other              map[string]interface{} `json:"other"`
+	QuotaDataCreatedAt int64                  `json:"-"`
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
@@ -388,12 +389,17 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
 	if common.DataExportEnabled {
+		quotaDataCreatedAt := createdAt
+		if params.QuotaDataCreatedAt > 0 {
+			quotaDataCreatedAt = params.QuotaDataCreatedAt
+		}
 		LogQuotaData(QuotaDataLogParams{
 			UserID:    userId,
 			Username:  username,
 			ModelName: params.ModelName,
 			Quota:     params.Quota,
-			CreatedAt: createdAt,
+			Count:     1,
+			CreatedAt: quotaDataCreatedAt,
 			TokenUsed: params.PromptTokens + params.CompletionTokens,
 			UseGroup:  params.Group,
 			TokenID:   params.TokenId,
@@ -404,22 +410,21 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 }
 
 type RecordTaskBillingLogParams struct {
-	UserId    int
-	LogType   int
-	Content   string
-	ChannelId int
-	ModelName string
-	Quota     int
-	TokenId   int
-	Group     string
-	Other     map[string]interface{}
-	NodeName  string // 任务发起节点；为空时回退当前节点
+	UserId             int
+	LogType            int
+	Content            string
+	ChannelId          int
+	ModelName          string
+	Quota              int
+	TokenId            int
+	Group              string
+	Other              map[string]interface{}
+	NodeName           string // 任务发起节点；为空时回退当前节点
+	QuotaDataCreatedAt int64
+	QuotaDataTracked   bool
 }
 
 func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
-	if params.LogType == LogTypeConsume && !common.LogConsumeEnabled {
-		return
-	}
 	username, _ := GetUsernameById(params.UserId, false)
 	tokenName := ""
 	if params.TokenId > 0 {
@@ -428,25 +433,43 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 		}
 	}
 	createdAt := common.GetTimestamp()
-	log := &Log{
-		UserId:    params.UserId,
-		Username:  username,
-		CreatedAt: createdAt,
-		Type:      params.LogType,
-		Content:   params.Content,
-		TokenName: tokenName,
-		ModelName: params.ModelName,
-		Quota:     params.Quota,
-		ChannelId: params.ChannelId,
-		TokenId:   params.TokenId,
-		Group:     params.Group,
-		Other:     common.MapToJsonStr(params.Other),
+	if params.LogType != LogTypeConsume || common.LogConsumeEnabled {
+		log := &Log{
+			UserId:    params.UserId,
+			Username:  username,
+			CreatedAt: createdAt,
+			Type:      params.LogType,
+			Content:   params.Content,
+			TokenName: tokenName,
+			ModelName: params.ModelName,
+			Quota:     params.Quota,
+			ChannelId: params.ChannelId,
+			TokenId:   params.TokenId,
+			Group:     params.Group,
+			Other:     common.MapToJsonStr(params.Other),
+		}
+		if err := createLog(log); err != nil {
+			common.SysLog("failed to record task billing log: " + err.Error())
+		}
 	}
-	err := createLog(log)
-	if err != nil {
-		common.SysLog("failed to record task billing log: " + err.Error())
+
+	if !params.QuotaDataTracked {
+		if params.QuotaDataCreatedAt == 0 && (params.LogType == LogTypeConsume || params.LogType == LogTypeRefund) {
+			common.SysLog(fmt.Sprintf("skip quota data adjustment without original attribution: user_id=%d model=%s log_type=%d", params.UserId, params.ModelName, params.LogType))
+		}
+		return
 	}
-	if params.LogType == LogTypeConsume && common.DataExportEnabled {
+	if params.QuotaDataCreatedAt <= 0 {
+		common.SysLog(fmt.Sprintf("skip quota data adjustment with invalid original timestamp: user_id=%d model=%s log_type=%d", params.UserId, params.ModelName, params.LogType))
+		return
+	}
+	quotaDelta := params.Quota
+	if params.LogType == LogTypeRefund {
+		quotaDelta = -params.Quota
+	} else if params.LogType != LogTypeConsume {
+		return
+	}
+	if quotaDelta != 0 {
 		nodeName := params.NodeName
 		if nodeName == "" {
 			nodeName = common.NodeName
@@ -455,8 +478,9 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 			UserID:    params.UserId,
 			Username:  username,
 			ModelName: params.ModelName,
-			Quota:     params.Quota,
-			CreatedAt: createdAt,
+			Quota:     quotaDelta,
+			Count:     0,
+			CreatedAt: params.QuotaDataCreatedAt,
 			UseGroup:  params.Group,
 			TokenID:   params.TokenId,
 			ChannelID: params.ChannelId,
