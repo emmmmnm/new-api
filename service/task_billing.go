@@ -168,7 +168,7 @@ func taskModelName(task *model.Task) string {
 }
 
 // RefundTaskQuota 统一的任务失败退款逻辑。
-// 当异步任务失败时，将预扣的 quota 退还给用户（支持钱包和订阅），并退还令牌额度。
+// 当异步任务失败时，退还资金与令牌额度，并回减用户和渠道用量。
 // 返回资金来源是否已成功退还；失败时保留 quota，供显式重试或人工对账。
 func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool {
 	quota := task.Quota
@@ -215,50 +215,6 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool 
 	return true
 }
 
-// RefundMidjourneyQuota applies the legacy Midjourney failure refund and keeps
-// usage statistics aligned with the original consume record.
-func RefundMidjourneyQuota(ctx context.Context, task *model.Midjourney, reason string) bool {
-	if task == nil || task.Quota == 0 {
-		return true
-	}
-	if err := model.IncreaseUserQuota(task.UserId, task.Quota, false); err != nil {
-		logger.LogError(ctx, "fail to increase user quota: "+err.Error())
-		return false
-	}
-
-	model.UpdateUserUsedQuota(task.UserId, -task.Quota)
-	model.UpdateChannelUsedQuota(task.ChannelId, -task.Quota)
-	modelName := task.ModelName
-	if modelName == "" {
-		modelName = CovertMjpActionToModelName(task.Action)
-	}
-	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
-		UserId:    task.UserId,
-		LogType:   model.LogTypeRefund,
-		ChannelId: task.ChannelId,
-		ModelName: modelName,
-		Quota:     task.Quota,
-		TokenId:   task.TokenId,
-		Group:     task.UseGroup,
-		Other: map[string]interface{}{
-			"task_id": task.MjId,
-			"reason":  reason,
-		},
-		NodeName:           task.NodeName,
-		QuotaDataCreatedAt: task.QuotaDataCreatedAt,
-		QuotaDataTracked:   task.QuotaDataTracked,
-	})
-	// Clear the persisted pending amount so a later poll cannot refund the same
-	// Midjourney task again after another state update wins the CAS.
-	task.Quota = 0
-	if task.Id > 0 {
-		if err := model.DB.Model(&model.Midjourney{}).Where("id = ?", task.Id).Update("quota", 0).Error; err != nil {
-			logger.LogError(ctx, fmt.Sprintf("退款成功但清除 Midjourney quota 失败 mj_id=%s: %v", task.MjId, err))
-		}
-	}
-	return true
-}
-
 // RecalculateTaskQuota 通用的异步差额结算。
 // actualQuota 是任务完成后的实际应扣额度，与预扣额度 (task.Quota) 做差额结算。
 // reason 用于日志记录（例如 "token重算" 或 "adaptor调整"）。
@@ -298,10 +254,12 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		logger.LogError(ctx, fmt.Sprintf("差额结算回写 quota 失败 task %s: %s", task.TaskID, err.Error()))
 	}
 
-	var logType int
-	var logQuota int
+	// 提交阶段已经累计过一次请求；结算阶段只调整最终用量。
 	model.UpdateUserUsedQuota(task.UserId, quotaDelta)
 	model.UpdateChannelUsedQuota(task.ChannelId, quotaDelta)
+
+	var logType int
+	var logQuota int
 	if quotaDelta > 0 {
 		logType = model.LogTypeConsume
 		logQuota = quotaDelta

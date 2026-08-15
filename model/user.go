@@ -1353,15 +1353,15 @@ func UpdateUserUsedQuotaAndRequestCount(id int, quota int) {
 	updateUserUsedQuotaAndRequestCount(id, quota, 1)
 }
 
-func UpdateUserUsedQuota(id int, quotaDelta int) {
-	if quotaDelta == 0 {
-		return
-	}
+// UpdateUserUsedQuota adjusts accumulated usage without changing request count.
+func UpdateUserUsedQuota(id int, quota int) {
 	if common.BatchUpdateEnabled {
-		addNewRecord(BatchUpdateTypeUsedQuota, id, quotaDelta)
+		addNewRecord(BatchUpdateTypeUsedQuota, id, quota)
 		return
 	}
-	updateUserUsedQuotaAndRequestCount(id, quotaDelta, 0)
+	if err := DB.Model(&User{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error; err != nil {
+		common.SysLog("failed to update user used quota: " + err.Error())
+	}
 }
 
 func updateUserUsedQuotaAndRequestCount(id int, quota int, count int) {
