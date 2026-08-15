@@ -1361,7 +1361,7 @@ func UpdateUserUsedQuota(id int, quotaDelta int) {
 		addNewRecord(BatchUpdateTypeUsedQuota, id, quotaDelta)
 		return
 	}
-	updateUserUsedQuota(id, quotaDelta)
+	updateUserUsedQuotaAndRequestCount(id, quotaDelta, 0)
 }
 
 func updateUserUsedQuotaAndRequestCount(id int, quota int, count int) {
